@@ -1,0 +1,7 @@
+{
+  "bcl2fastq_to_report.index_type_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9/index",
+  "bcl2fastq_to_report.runfold_path": "/data/bioinfo/xujh/chaifen_old/2023_9_9/230909_A00602_0655_AHLCKFDRX3",
+  "bcl2fastq_to_report.PJ_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9_bcl_PJ",
+  "bcl2fastq_to_report.PJ_name_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9/index/name.txt",
+  "bcl2fastq_to_report.bcl_path": "/data/bioinfo/xujh/chaifen_old/2023_9_9/230909_A00602_0655_AHLCKFDRX3/Data/Intensities/BaseCalls"
+}
