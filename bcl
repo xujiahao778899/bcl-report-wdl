@@ -5,17 +5,6 @@
 ###PJ_name_path:/data/xujh/2023_10_12_zong/index/name.txt
 ###PJ_path:/data/xujh/2023_10_12_bcl_PJ_zong
 
-{
-  "bcl2fastq_to_report.index_type_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9/index",
-  "bcl2fastq_to_report.runfold_path": "/data/bioinfo/xujh/chaifen_old/2023_9_9/230909_A00602_0655_AHLCKFDRX3",
-  "bcl2fastq_to_report.PJ_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9_bcl_PJ",
-  "bcl2fastq_to_report.PJ_name_path": "/data/bioinfo/xujh/chaifen_new/2023_9_9/index/name.txt",
-  "bcl2fastq_to_report.bcl_path": "/data/bioinfo/xujh/chaifen_old/2023_9_9/230909_A00602_0655_AHLCKFDRX3/Data/Intensities/BaseCalls"
-}
-
-
-
-
 
 workflow bcl2fastq_to_report {
     String index_type_path
@@ -23,6 +12,7 @@ workflow bcl2fastq_to_report {
     String runfold_path
     String PJ_name_path
     String PJ_path
+    String bcl_stat
 
     call bcl2fastq {
         input:
@@ -71,6 +61,14 @@ workflow bcl2fastq_to_report {
             PJ_path=PJ_path,
             n4=sample_name.s4
     }
+    
+    call stat {
+        input:
+            index_type_path=index_type_path,
+            bcl_stat = bcl_stat,
+            PJ_path=PJ_path,
+            n5=md5.s5
+    }
 }
 
 
@@ -83,11 +81,11 @@ task bcl2fastq {
     command {
         cd ${index_type_path}
         cat sample.txt|while read id;
-        do /data/software/bin/bcl2fastq2/bin/bcl2fastq --input-dir ${bcl_path} --sample-sheet ${index_type_path}/${z2}/Sample_sheet.csv --output-dir ${index_type_path}/${z2}/raw_data --runfolder-dir ${runfold_path} -r 35 -p 35 -w 35 --no-lane-splitting 
+        do /data/software/bin/bcl2fastq2/bin/bcl2fastq --input-dir ${bcl_path} --sample-sheet ${index_type_path}/${z2}/Sample_sheet.csv --output-dir ${index_type_path}/${z2}/raw_data --runfolder-dir ${runfold_path} -r 35 -p 35 -w 35 --no-lane-splitting --ignore-missing-bcls --ignore-missing-filter --ignore-missing-controls --ignore-missing-positions --mask-short-adapter-reads=8 --minimum-trimmed-read-length=8 --create-fastq-for-index-reads --use-bases-mask=Y151,I8,Y24,Y151
         done
     }
     output{
-        String s="${index_type_path}/raw_data"
+        String s="/data/bioinfo/xujh/test/raw_data"
     }
     runtime{
         continueOnReturnCode: true
@@ -142,7 +140,7 @@ task fastp {
         ${z} ${PJ_name_path}|sort|uniq|while read id; 
         do mkdir ${PJ_path}/${z2}/01.CleanData  ${PJ_path}/${z2}/02.QC ${PJ_path}/${z2}/02.QC/json_html 
         grep ${z2} ${PJ_name_path}|${z1}|while read i;
-        do fastp -i ${PJ_path}/${z2}/00.RawData/${z3}_*R1* -I ${PJ_path}/${z2}/00.RawData/${z3}_*R2* -o ${PJ_path}/${z2}/01.CleanData/${z3}_clean_R1.fastq.gz -O ${PJ_path}/${z2}/01.CleanData/${z3}_clean_R2.fastq.gz -w 20 -j ${PJ_path}/${z2}/02.QC/json_html/${z3}.json -h ${PJ_path}/${z2}/02.QC/json_html/${z3}.html
+        do fastp -i ${PJ_path}/${z2}/00.RawData/${z3}_*R1* -I ${PJ_path}/${z2}/00.RawData/${z3}_*R3* -o ${PJ_path}/${z2}/01.CleanData/${z3}_clean_R1.fastq.gz -O ${PJ_path}/${z2}/01.CleanData/${z3}_clean_R3.fastq.gz -w 20 -j ${PJ_path}/${z2}/02.QC/json_html/${z3}.json -h ${PJ_path}/${z2}/02.QC/json_html/${z3}.html
         done
         done
     }
@@ -194,11 +192,16 @@ task sample_name {
     command {
         mkdir ${n3}
         cd ${index_type_path}
+        source activate /data/software/bin/miniconda/envs/bcl_report
         ${z} ${PJ_name_path} |sort|uniq|while read id;
         do grep ${z2} ${PJ_name_path}|${z1}|while read i;
         do mkdir ${PJ_path}/${z2}/00.RawData/${z3} ${PJ_path}/${z2}/01.CleanData/${z3}
         mv ${PJ_path}/${z2}/00.RawData/${z3}_*.gz ${PJ_path}/${z2}/00.RawData/${z3}
         mv ${PJ_path}/${z2}/01.CleanData/${z3}_*.gz ${PJ_path}/${z2}/01.CleanData/${z3}
+        seqkit sample -j 20 -p 1 ${PJ_path}/${z2}/01.CleanData/${z3}/${z3}_*R1.gz |seqkit seq -j 20 --name --only-id -o ${PJ_path}/${z2}/01.CleanData/${z3}/id.txt
+        seqkit grep --pattern-file ${PJ_path}/${z2}/01.CleanData/${z3}/id.txt ${PJ_path}/${z2}/00.RawData/${z3}/${z3}_*_I1*.gz -o ${PJ_path}/${z2}/01.CleanData/${z3}/${z3}_clean_I1.fastq.gz -j 20
+        seqkit grep --pattern-file ${PJ_path}/${z2}/01.CleanData/${z3}/id.txt ${PJ_path}/${z2}/00.RawData/${z3}/${z3}_*_R2*.gz -o ${PJ_path}/${z2}/01.CleanData/${z3}/${z3}_clean_R2.fastq.gz -j 20
+        rm -rf ${PJ_path}/${z2}/01.CleanData/${z3}/id.txt
         done
         done
     }
@@ -230,11 +233,32 @@ task md5 {
         done
     
     }
+    output{
+        String s5="${PJ_path}/012.md5"
+    }
     runtime{
         continueOnReturnCode: true
     }
 }
 
-
-
-
+task stat {
+    String n5
+    String bcl_stat
+    String index_type_path
+    String PJ_path
+    command {
+        source activate /data/software/bin/miniconda/envs/bcl_report
+        mkdir ${n5}
+        mkdir ${bcl_stat}/json_html
+        \cp -r ${index_type_path}/*/raw_data/Reports/html/*/default/* ${bcl_stat}/default
+        \cp -r ${PJ_path}/*/02.QC/json_html/* ${bcl_stat}/json_html
+        python /data/bioinfo/xujh/stats/get_report_reads.py -excel_path ${bcl_stat}/name.xls -reports_url ${bcl_stat}/default/ -out_dir ${bcl_stat}
+        python /data/bioinfo/xujh/report/final_report.py -in_dir ${bcl_stat}/json_html -out_dir  ${bcl_stat}  -html_path /data/bioinfo/xujh/report/report_template/final_report_template -report_title '测序以及数据质控'
+    }
+    output{
+        String s5="${PJ_path}/012.stat"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
