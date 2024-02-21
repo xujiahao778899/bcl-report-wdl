@@ -1,0 +1,195 @@
+###参数示例
+##bcl_path: /data/novaseq/231013_A00602_0657_BHJNTHDSX7/Data/Intensities/BaseCalls
+###index_type_path:${index_type_path}
+###runfold_path:/data/novaseq/231013_A00602_0657_BHJNTHDSX7
+###PJ_name_path:/data/xujh/2023_10_12_zong/index/name.txt
+###PJ_path:/data/xujh/2023_10_12_bcl_PJ_zong
+
+
+workflow bcl2fastq_to_report {
+    String index_type_path
+    String bcl_path
+
+
+
+    call bcl2fastq {
+        input:
+            index_type_path=index_type_path,
+            bcl_path=bcl_path
+                       
+    }
+
+    call Project_sample {
+        input:
+            index_type_path=index_type_path,
+            n=bcl2fastq.s
+    }
+
+    call fastp {
+        input:
+            index_type_path=index_type_path,
+            n1=Project_sample.s1
+
+    }
+    call report {
+        input:
+            index_type_path=index_type_path,
+            n2=fastp.s2
+    }
+
+    call sample_name {
+        input:
+            index_type_path=index_type_path,
+            n3=report.s3
+    }   
+
+}
+
+
+###合并数据
+task bcl2fastq {
+    String index_type_path
+    String bcl_path
+    String z="awk \'{print $1}\'"
+    String z1="awk \'{print $2}\'"
+    String z2="$"+"{"+"id"+"}"
+    String z3="$"+"{"+"i"+"}"
+    String m="for ((i=0; i<${"+"#"+"my_vector[@]}"+";"+" i++))"
+    String m1="my_vector[$i]="+"$"+"{my_vector[$"+"i]}/${z2}/00.RawData/${z3}/${z3}_*R1*"
+    String m2="for ((i=0; i<${"+"#"+"my_vector1[@]}"+";"+" i++))"
+    String m3="my_vector1[$i]="+"$"+"{my_vector1[$"+"i]}/${z2}/00.RawData/${z3}/${z3}_*R2*"
+    String my_vector="my_vector"
+    command {
+        ${z} ${index_type_path}/name.txt |uniq|while read id;
+        do mkdir  ${index_type_path}/${z2} ${index_type_path}/${z2}/00.RawData
+        grep ${z2}  ${index_type_path}/name.txt|${z1}|while read i;
+        ${my_vector}=${bcl_path}
+        ${my_vector}=${bcl_path}
+
+        ${m}; do
+            ${m1}
+        done
+
+        ${m2}; do
+            ${m3}
+        done
+
+        do cat ${my_vector}  > ${index_type_path}/${z2}/${z3}_R1.fastq.gz 
+        cat ${my_vector1} > ${index_type_path}/${z2}/${z3}_R2.fastq.gz
+        done
+        done
+    }
+    output{
+        String s="/data/bioinfo/xujh/test/raw_data"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
+
+
+###将raw_data分配到每个项目名称里
+task Project_sample{
+    String index_type_path
+    String z="awk \'{print $1}\'"
+    String z1="awk \'{print $2}\'"
+    String z2="$"+"{"+"id"+"}"
+    String z3="$"+"{"+"i"+"}"
+    String n
+    command {
+        mkdir ${n}
+        source activate /data/software/bin/miniconda/envs/bcl_report
+        ${z} ${index_type_path}/name.txt |uniq|while read id;
+        do mkdir ${index_type_path}/${z2}/01.CleanData  ${index_type_path}/${z2}/02.QC ${index_type_path}/${z2}/02.QC/json_html
+        mv ${index_type_path}/${z2}/*.gz ${index_type_path}/${z2}/00.RawData
+        grep ${z2} ${index_type_path}/name.txt|${z1}|while read i;
+        do fastp -i ${index_type_path}/${z2}/00.RawData/${z3}_*R1* -I ${index_type_path}/${z2}/00.RawData/${z3}_*R2* -o ${index_type_path}/${z2}/01.CleanData/${z3}_clean_R1.fastq.gz -O ${index_type_path}/${z2}/01.CleanData/${z3}_clean_R2.fastq.gz -w 20 -j ${index_type_path}/${z2}/02.QC/json_html/${z3}.json -h ${index_type_path}/${z2}/02.QC/json_html/${z3}.html
+        done
+        done
+        
+    }
+    output{
+        String s1="${PJ_path}/00.RawData"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
+
+######对每个项目名称里的fq进行过滤
+task fastp {
+    String index_type_path
+    String z="awk \'{print $1}\'"
+    String z1="awk \'{print $2}\'"
+    String z2="$"+"{"+"id"+"}"
+    String z3="$"+"{"+"i"+"}"
+    String n1
+    command {
+        mkdir ${n1}
+        source activate /data/software/bin/miniconda/envs/bcl_report
+        ${z} ${index_type_path}/name.txt |uniq|while read id;
+        do  mkdir ${index_type_path}/${z2}/03.Report 
+        python /data/bioinfo/xujh/report/final_report.py -in_dir ${index_type_path}/${z2}/02.QC/json_html -out_dir  ${index_type_path}/${z2}/03.Report  -html_path /data/bioinfo/xujh/report/report_template/final_report_template -report_title '测序以及数据质控'
+        done
+    }
+
+    output{
+        String s2="${PJ_path}/01.CleanData"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
+
+###产生报告
+task report {
+    String index_type_path
+    String z="awk \'{print $1}\'"
+    String z1="awk \'{print $2}\'"
+    String z2="$"+"{"+"id"+"}"
+    String z3="$"+"{"+"i"+"}"
+    String n2
+    command {
+        mkdir ${n2}
+        ${z} ${index_type_path}/name.txt |uniq|while read id;
+        do grep ${z2} ${index_type_path}/name.txt|${z1}|while read i;
+        do mkdir ${index_type_path}/${z2}/00.RawData/${z3} ${index_type_path}/${z2}/01.CleanData/${z3}
+        mv ${index_type_path}/${z2}/00.RawData/${z3}_*.gz ${index_type_path}/${z2}/00.RawData/${z3}
+        mv ${index_type_path}/${z2}/01.CleanData/${z3}_*.gz ${index_type_path}/${z2}/01.CleanData/${z3}
+        done
+        done
+
+
+    }
+    output{
+        String s3="${PJ_path}/03.Report"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
+
+###将每个fq按照相管给的结构进行归档
+task sample_name {
+    String index_type_path
+    String z="awk \'{print $1}\'"
+    String z2="$"+"{"+"id"+"}"
+    String n3
+    command {
+        mkdir ${n3}
+        ${z} ${index_type_path}/name.txt |sort|uniq|while read id;
+        do cd ${index_type_path}/${z2}
+        md5sum ./00.RawData/*/*.gz >${index_type_path}/${z2}/md5_raw.txt
+        cd ${index_type_path}/${z2}
+        md5sum ./01.CleanData/*/*.gz > ${index_type_path}/${z2}/md5_clean.txt
+        cat ${index_type_path}/${z2}/md5_raw.txt ${index_type_path}/${z2}/md5_clean.txt >${index_type_path}/${z2}/md5.txt
+        rm -rf ${index_type_path}/${z2}/md5_raw.txt ${index_type_path}/${z2}/md5_clean.txt
+        done
+    }
+    output{
+        String s4="${PJ_path}/012.CleanData"
+    }
+    runtime{
+        continueOnReturnCode: true
+    }
+}
